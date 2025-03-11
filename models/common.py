@@ -666,6 +666,30 @@ class CBFuse(nn.Module):
 
     def forward(self, xs):
         target_size = xs[-1].shape[2:]
+        if target_size[0] <10:
+            res = [F.interpolate(x[self.idx[i]], size=target_size, mode='nearest') for i, x in enumerate(xs[:-1])]
+            out = torch.sum(torch.stack(res + xs[-1:]), dim=0)
+            return out
+        j = 0
+        for i,x in enumerate(xs[:-1]):
+            j=i
+            if target_size[0] < 10:
+                continue
+            if i == 0:
+                x0 = F.interpolate(x[self.idx[i]], size=target_size, mode='nearest')
+            if i == 1:
+                x1 = F.interpolate(x[self.idx[i]], size=target_size, mode='nearest')     
+            if i == 2:
+                x2 = F.interpolate(x[self.idx[i]], size=target_size, mode='nearest')
+        if j == 2 and target_size[0] > 10:
+            out = x0+x1+x2 +xs[-1:][0]
+            return out
+        if j == 1 and target_size[0] > 10:
+            out = x0+x1+xs[-1:][0]
+            return out
+        if j == 0 and target_size[0] > 10:
+            out = x0 +xs[-1:][0]
+            return out
         res = [F.interpolate(x[self.idx[i]], size=target_size, mode='nearest') for i, x in enumerate(xs[:-1])]
         out = torch.sum(torch.stack(res + xs[-1:]), dim=0)
         return out

@@ -46,7 +46,8 @@ def export_formats():
         ['TensorFlow Lite', 'tflite', '.tflite', True, False],
         ['TensorFlow Edge TPU', 'edgetpu', '_edgetpu.tflite', False, False],
         ['TensorFlow.js', 'tfjs', '_web_model', False, False],
-        ['PaddlePaddle', 'paddle', '_paddle_model', True, True],]
+        ['PaddlePaddle', 'paddle', '_paddle_model', True, True],
+        ['ONNX RKNN', 'onnx_rknn', '_onnxrknn.onnx', True, True],]
     return pd.DataFrame(x, columns=['Format', 'Argument', 'Suffix', 'CPU', 'GPU'])
 
 
@@ -140,6 +141,7 @@ def export_onnx(model, im, file, opset, dynamic, simplify, prefix=colorstr('ONNX
     return f, model_onnx
     
 
+
 @try_export
 def export_onnx_end2end(model, im, file, simplify, topk_all, iou_thres, conf_thres, device, labels, prefix=colorstr('ONNX END2END:')):
     # YOLO ONNX export
@@ -198,6 +200,56 @@ def export_onnx_end2end(model, im, file, simplify, topk_all, iou_thres, conf_thr
     return f, model_onnx
 
 
+@try_export
+def export_onnx_rknn(model, im, file, opset, dynamic, simplify, prefix=colorstr('ONNX RKNN:')):
+    # YOLO ONNX export
+    check_requirements('onnx')
+    import onnx
+
+    LOGGER.info(f'\n{prefix} starting export with onnx {onnx.__version__}...')
+    f = os.path.splitext(file)[0] + "-onnxrknn.onnx"
+    if isinstance(model, SegmentationModel):
+        assert "SegmentationModel  not implemented"
+
+    output_names = ['output1', 'output2' ,'output3', 'output4', 'output5', 'output6']
+    torch.onnx.export(
+        model.cpu() if dynamic else model,  # --dynamic only compatible with cpu
+        im.cpu() if dynamic else im,
+        f,
+        verbose=False,
+        opset_version=opset,
+        do_constant_folding=True,
+        input_names=['images'],
+        output_names=output_names,
+        dynamic_axes=dynamic or None)
+
+    # Checks
+    model_onnx = onnx.load(f)  # load onnx model
+    onnx.checker.check_model(model_onnx)  # check onnx model
+
+    # Metadata
+    d = {'stride': int(max(model.stride)), 'names': model.names}
+    for k, v in d.items():
+        meta = model_onnx.metadata_props.add()
+        meta.key, meta.value = k, str(v)
+    onnx.save(model_onnx, f)
+
+    # Simplify
+    if simplify:
+        try:
+            cuda = torch.cuda.is_available()
+            check_requirements(('onnxruntime-gpu' if cuda else 'onnxruntime', 'onnx-simplifier>=0.4.1'))
+            import onnxsim
+
+            LOGGER.info(f'{prefix} simplifying with onnx-simplifier {onnxsim.__version__}...')
+            model_onnx, check = onnxsim.simplify(model_onnx)
+            assert check, 'assert check failed'
+            onnx.save(model_onnx, f)
+        except Exception as e:
+            LOGGER.info(f'{prefix} simplifier failure: {e}')
+    return f, model_onnx
+    
+    
 @try_export
 def export_openvino(file, metadata, half, prefix=colorstr('OpenVINO:')):
     # YOLO OpenVINO export
@@ -533,7 +585,7 @@ def run(
     fmts = tuple(export_formats()['Argument'][1:])  # --include arguments
     flags = [x in include for x in fmts]
     assert sum(flags) == len(include), f'ERROR: Invalid --include {include}, valid --include arguments are {fmts}'
-    jit, onnx, onnx_end2end, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle = flags  # export booleans
+    jit, onnx, onnx_end2end, xml, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle, onnx_rknn = flags  # export booleans
     file = Path(url2file(weights) if str(weights).startswith(('http:/', 'https:/')) else weights)  # PyTorch weights
 
     # Load PyTorch model
@@ -560,7 +612,8 @@ def run(
             m.inplace = inplace
             m.dynamic = dynamic
             m.export = True
-
+            if onnx_rknn:
+                m.rknn = True
     for _ in range(2):
         y = model(im)  # dry runs
     if half and not coreml:
@@ -613,6 +666,8 @@ def run(
             f[9], _ = export_tfjs(file)
     if paddle:  # PaddlePaddle
         f[10], _ = export_paddle(model, im, file, metadata)
+    if onnx_rknn:
+        f[11], _ = export_onnx_rknn(model, im, file, opset, dynamic, simplify)
 
     # Finish
     f = [str(x) for x in f if x]  # filter out '' and None
@@ -663,7 +718,7 @@ def parse_opt():
         '--include',
         nargs='+',
         default=['torchscript'],
-        help='torchscript, onnx, onnx_end2end, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle')
+        help='torchscript, onnx, onnx_end2end, openvino, engine, coreml, saved_model, pb, tflite, edgetpu, tfjs, paddle, onnx_rknn')
     opt = parser.parse_args()
 
     if 'onnx_end2end' in opt.include:  

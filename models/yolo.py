@@ -33,6 +33,7 @@ class Detect(nn.Module):
     shape = None
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
+    rknn = False
 
     def __init__(self, nc=80, ch=(), inplace=True):  # detection layer
         super().__init__()
@@ -52,6 +53,12 @@ class Detect(nn.Module):
 
     def forward(self, x):
         shape = x[0].shape  # BCHW
+        result = []
+        if self.rknn:
+            for i in range(self.nl):
+                result.append(self.cv2[i](x[i]))
+                result.append(self.cv3[i](x[i]))
+            return result
         for i in range(self.nl):
             x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1)
         if self.training:
@@ -82,6 +89,7 @@ class DDetect(nn.Module):
     shape = None
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
+    rknn = False
 
     def __init__(self, nc=80, ch=(), inplace=True):  # detection layer
         super().__init__()
@@ -101,6 +109,12 @@ class DDetect(nn.Module):
 
     def forward(self, x):
         shape = x[0].shape  # BCHW
+        result = []
+        if self.rknn:
+            for i in range(self.nl):
+                result.append(self.cv2[i](x[i]))
+                result.append(self.cv3[i](x[i]))
+            return result
         for i in range(self.nl):
             x[i] = torch.cat((self.cv2[i](x[i]), self.cv3[i](x[i])), 1)
         if self.training:
@@ -131,6 +145,8 @@ class DualDetect(nn.Module):
     shape = None
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
+    rknn = False
+    
 
     def __init__(self, nc=80, ch=(), inplace=True):  # detection layer
         super().__init__()
@@ -156,6 +172,12 @@ class DualDetect(nn.Module):
 
     def forward(self, x):
         shape = x[0].shape  # BCHW
+        result = []
+        if self.rknn:
+            for i in range(self.nl):
+                result.append(self.cv2[i](x[i]))
+                result.append(self.cv3[i](x[i]))
+            return result
         d1 = []
         d2 = []
         for i in range(self.nl):
@@ -194,7 +216,7 @@ class DualDDetect(nn.Module):
     shape = None
     anchors = torch.empty(0)  # init
     strides = torch.empty(0)  # init
-
+    rknn = False
     def __init__(self, nc=80, ch=(), inplace=True):  # detection layer
         super().__init__()
         self.nc = nc  # number of classes
@@ -219,6 +241,12 @@ class DualDDetect(nn.Module):
 
     def forward(self, x):
         shape = x[0].shape  # BCHW
+        result = []
+        if self.rknn:
+            for i in range(self.nl):
+                result.append(self.cv2[i](x[i]))
+                result.append(self.cv3[i](x[i]))
+            return result
         d1 = []
         d2 = []
         for i in range(self.nl):
